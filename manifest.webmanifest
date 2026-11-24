@@ -1,0 +1,15 @@
+{
+  "name": "Private Expense",
+  "short_name": "Private Expense",
+  "description": "Shared expenses between two people, split 50/50, settled up together.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#14111a",
+  "theme_color": "#14111a",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

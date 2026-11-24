@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Only this app's own files may run; the only server it may talk to is GitHub's API. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src https://api.github.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Private Expense</title>
+<meta name="description" content="Shared expenses between two people, split 50/50, settled up together.">
+<meta name="theme-color" content="#14111a" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f7f5fa" media="(prefers-color-scheme: light)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+  :root {
+    --bg: #f7f5fa; --card: #ffffff; --text: #17141d; --muted: #6e6878;
+    --line: #e7e3ee; --accent: #7c3aed; --accent-ink: #ffffff; --danger: #dc2626;
+    --chip: #efecf4; --good: #15803d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14111a; --card: #1d1925; --text: #f1eef6; --muted: #a39cb0;
+      --line: #2c2636; --accent: #a78bfa; --accent-ink: #1b1030; --danger: #f87171;
+      --chip: #2a2433; --good: #4ade80;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { padding: env(safe-area-inset-top) 16px calc(24px + env(safe-area-inset-bottom)); max-width: 560px; margin: 0 auto; }
+  [hidden] { display: none !important; }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 14px 0 8px; gap: 8px; }
+  header h1 { font-size: 15px; font-weight: 600; margin: 0; color: var(--muted); letter-spacing: .02em; }
+  .sync { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); background: none; border: 0; padding: 6px 8px; border-radius: 8px; }
+  .sync:active { background: var(--chip); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.ok { background: var(--good); } .dot.busy { background: var(--accent); } .dot.err { background: var(--danger); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px; margin-bottom: 14px; }
+  .balance { font-size: 22px; font-weight: 700; line-height: 1.25; margin: 2px 0 4px; }
+  .balance .amt { color: var(--accent); }
+  .sub { color: var(--muted); font-size: 14px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+  label.f { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 6px; }
+  input.t, select.t { width: 100%; border: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 10px; padding: 11px 12px; font-size: 16px; }
+  .amount-row { display: flex; align-items: center; gap: 8px; }
+  .amount-row .cur { font-size: 26px; color: var(--muted); }
+  #amount { flex: 1; min-width: 0; font-size: 34px; font-weight: 700; border: 0; outline: 0; background: transparent; color: var(--text); padding: 4px 0; }
+  .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .seg button { border: 1px solid var(--line); background: var(--chip); color: var(--text); border-radius: 12px; padding: 12px 8px; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 700; }
+  .btn { width: 100%; margin-top: 12px; border: 0; border-radius: 12px; padding: 14px; font-size: 17px; font-weight: 700; background: var(--accent); color: var(--accent-ink); }
+  .btn.secondary { background: var(--chip); color: var(--text); font-weight: 600; }
+  .btn:disabled { opacity: .45; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+  li:first-child { border-top: 0; }
+  li .what { flex: 1; min-width: 0; }
+  li .what b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  li .what small { color: var(--muted); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  li .amt { font-weight: 600; font-variant-numeric: tabular-nums; }
+  li button.x { background: none; border: 0; color: var(--muted); font-size: 18px; width: 36px; height: 36px; border-radius: 8px; }
+  li button.x:active { background: var(--chip); color: var(--danger); }
+  .empty { color: var(--muted); text-align: center; padding: 14px 0; display: block; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 14px; padding: 4px 0; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .row button { background: var(--chip); color: var(--text); border: 0; border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+  .note { font-size: 14px; color: var(--muted); }
+  .warn { color: var(--danger); font-size: 14px; }
+  .toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+    background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 90vw; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Private Expense</h1>
+  <button class="sync" id="syncBtn" type="button" aria-label="Sync now"><span class="dot" id="dot"></span><span id="syncText">…</span></button>
+</header>
+
+<!-- 1. Connect this phone to the shared data -->
+<section id="connectView" class="card" hidden>
+  <h2>Connect</h2>
+  <p class="note">Open the <b>setup link</b> you were sent, or paste the details below.</p>
+  <label class="f" for="repo">Data repository</label>
+  <input class="t" id="repo" placeholder="owner/repo" autocomplete="off" autocapitalize="off" spellcheck="false">
+  <label class="f" for="token">Access key</label>
+  <input class="t" id="token" type="password" placeholder="github_pat_…" autocomplete="off" spellcheck="false">
+  <button class="btn" id="connectBtn" type="button">Connect</button>
+  <p class="warn" id="connectErr" hidden></p>
+</section>
+
+<!-- 2. First-time setup: the two names -->
+<section id="namesView" class="card" hidden>
+  <h2>Who shares expenses?</h2>
+  <label class="f" for="name0">First person</label>
+  <input class="t" id="name0" maxlength="24" autocomplete="off">
+  <label class="f" for="name1">Second person</label>
+  <input class="t" id="name1" maxlength="24" autocomplete="off">
+  <label class="f" for="currencyPick">Currency</label>
+  <select class="t" id="currencyPick">
+    <option value="$">$ USD</option><option value="€">€ EUR</option>
+    <option value="£">£ GBP</option><option value="LBP ">LBP</option>
+  </select>
+  <button class="btn" id="namesBtn" type="button" disabled>Save</button>
+</section>
+
+<!-- 3. Which person uses this phone (sets the default payer) -->
+<section id="meView" class="card" hidden>
+  <h2>Who's using this phone?</h2>
+  <p class="note">Used as the default “paid by”. You can still pick the other person on each expense.</p>
+  <div class="seg" id="meSeg"></div>
+</section>
+
+<!-- Main -->
+<main id="mainView" hidden>
+  <section class="card">
+    <div class="balance" id="balance"></div>
+    <div class="sub" id="balanceSub"></div>
+    <button class="btn" id="settleBtn" type="button" hidden>Settle up</button>
+  </section>
+
+  <form class="card" id="form" autocomplete="off">
+    <div class="amount-row">
+      <span class="cur" id="curSign">$</span>
+      <input id="amount" inputmode="decimal" placeholder="0" aria-label="Amount">
+    </div>
+    <label class="f">Paid by</label>
+    <div class="seg" id="payerSeg"></div>
+    <input class="t" id="note" placeholder="What was it? (optional)" aria-label="Note" maxlength="80" style="margin-top:12px">
+    <button class="btn" id="add" type="submit" disabled>Add expense · split 50/50</button>
+  </form>
+
+  <section class="card">
+    <h2>Since last settle-up</h2>
+    <ul id="openList"></ul>
+  </section>
+
+  <section class="card">
+    <h2>History</h2>
+    <div id="history"></div>
+  </section>
+
+  <section class="card">
+    <h2>Settings</h2>
+    <details>
+      <summary>Names, currency and this phone</summary>
+      <label class="f" for="edit0">First person</label>
+      <input class="t" id="edit0" maxlength="24" autocomplete="off">
+      <label class="f" for="edit1">Second person</label>
+      <input class="t" id="edit1" maxlength="24" autocomplete="off">
+      <label class="f" for="editCur">Currency</label>
+      <select class="t" id="editCur">
+        <option value="$">$ USD</option><option value="€">€ EUR</option>
+        <option value="£">£ GBP</option><option value="LBP ">LBP</option>
+      </select>
+      <button class="btn secondary" id="saveSettings" type="button">Save names &amp; currency</button>
+      <label class="f">This phone belongs to</label>
+      <div class="seg" id="meSeg2"></div>
+    </details>
+    <details>
+      <summary>Share, export, disconnect</summary>
+      <p class="note">The setup link contains the access key. Anyone with it can see and edit these expenses, so only send it privately.</p>
+      <div class="row">
+        <button type="button" id="copyLink">Copy setup link</button>
+        <button type="button" id="export">Export CSV</button>
+        <button type="button" id="disconnect">Disconnect this phone</button>
+      </div>
+    </details>
+  </section>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="app.js"></script>
+</body>
+</html>
