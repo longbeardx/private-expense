@@ -61,7 +61,11 @@
   .seg button { border: 1px solid var(--line); background: var(--chip); color: var(--text); border-radius: 12px; padding: 12px 8px; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 700; }
   .seg.kind { margin-bottom: 10px; }
-  .seg.kind button { padding: 8px; font-size: 14px; }
+  .seg button { min-width: 0; }
+  .seg.two button { white-space: normal; padding: 8px 6px; line-height: 1.2; overflow-wrap: anywhere; }
+  .seg.two button b, .seg.two button small { display: block; }
+  .seg.two button small { font-size: 13px; font-weight: 500; opacity: .85; }
+  .seg.kind button { padding: 8px 4px; font-size: 14px; white-space: normal; line-height: 1.2; }
   li.loan .amt { color: var(--accent); }
   .btn { width: 100%; margin-top: 12px; border: 0; border-radius: 12px; padding: 14px; font-size: 17px; font-weight: 700; background: var(--accent); color: var(--accent-ink); }
   .btn.secondary { background: var(--chip); color: var(--text); font-weight: 600; }

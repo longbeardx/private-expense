@@ -268,14 +268,17 @@ if (typeof document !== "undefined") (() => {
     $("payerLabel").textContent = loan ? "Who gave the money?" : "Paid by";
     if (loan) {
       const box = $("payerSeg"); box.innerHTML = "";
-      [[0, `${p0} → ${p1}`], [1, `${p1} → ${p0}`]].forEach(([i, txt]) => {
-        const b = document.createElement("button");
-        b.type = "button"; b.textContent = txt; b.setAttribute("aria-pressed", i === payer);
+      box.classList.add("two");
+      [0, 1].forEach((i) => {
+        const b = document.createElement("button"), who = document.createElement("b"), to = document.createElement("small");
+        who.textContent = names()[i]; to.textContent = `gave ${names()[other(i)]}`;
+        b.type = "button"; b.append(who, to); b.setAttribute("aria-pressed", i === payer);
         b.setAttribute("aria-label", `${names()[i]} gave ${names()[other(i)]}`);
         b.onclick = () => { payer = i; renderForm(); };
         box.appendChild(b);
       });
     } else {
+      $("payerSeg").classList.remove("two");
       segment($("payerSeg"), (i) => { payer = i; renderForm(); }, payer);
       renderChips();
     }
