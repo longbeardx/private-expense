@@ -60,6 +60,9 @@
   .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .seg button { border: 1px solid var(--line); background: var(--chip); color: var(--text); border-radius: 12px; padding: 12px 8px; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 700; }
+  .seg.kind { margin-bottom: 10px; }
+  .seg.kind button { padding: 8px; font-size: 14px; }
+  li.loan .amt { color: var(--accent); }
   .btn { width: 100%; margin-top: 12px; border: 0; border-radius: 12px; padding: 14px; font-size: 17px; font-weight: 700; background: var(--accent); color: var(--accent-ink); }
   .btn.secondary { background: var(--chip); color: var(--text); font-weight: 600; }
   .btn:disabled { opacity: .45; }
@@ -132,12 +135,16 @@
   </section>
 
   <form class="card" id="form" autocomplete="off">
+    <div class="seg kind" id="kindSeg" role="group" aria-label="Type">
+      <button type="button" data-k="expense">Shared expense</button>
+      <button type="button" data-k="loan">💸 Loan</button>
+    </div>
     <div class="amount-row">
       <span class="cur" id="curSign">$</span>
       <input id="amount" inputmode="decimal" placeholder="0" aria-label="Amount">
     </div>
     <div class="chips" id="chips" role="group" aria-label="Category"></div>
-    <label class="f">Paid by</label>
+    <label class="f" id="payerLabel">Paid by</label>
     <div class="seg" id="payerSeg"></div>
     <input class="t" id="note" placeholder="What was it? (optional)" aria-label="Note" maxlength="80" style="margin-top:12px">
     <button class="btn" id="add" type="submit" disabled>Add expense · split 50/50</button>

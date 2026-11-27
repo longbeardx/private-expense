@@ -1,6 +1,6 @@
 // Offline support for the app's own files, network first (newest version
 // whenever online). Requests to GitHub's API are never cached here.
-const CACHE = "private-expense-v2";
+const CACHE = "private-expense-v3";
 const SHELL = ["./", "index.html", "app.js", "manifest.webmanifest", "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png"];
 
 self.addEventListener("install", (e) =>

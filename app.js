@@ -13,7 +13,8 @@ const PE = (() => {
   const emptyDoc = () => ({
     version: 1,
     settings: { people: ["", ""], currency: "$", updatedAt: 0 },
-    expenses: [],      // {id, amount, payer: 0|1, note, ts, cat?}
+    expenses: [],      // {id, amount, payer: 0|1, note, ts, cat?, loan?}
+                       // loan: true = payer gave the other money; the FULL amount is owed (no split)
     categories: [],    // custom categories, either person can add: {id, name, ts}
     settlements: [],   // {id, from: 0|1, to: 0|1, amount, ts, covers: [expense ids]}
     deleted: [],       // ids of deleted expenses/settlements
@@ -48,7 +49,7 @@ const PE = (() => {
   // half cent after settling up counts as settled.
   function balance(doc) {
     let twice = 0;
-    for (const e of doc.expenses) twice += (e.payer === 0 ? 1 : -1) * Math.round(e.amount * 100);
+    for (const e of doc.expenses) twice += (e.payer === 0 ? 1 : -1) * (e.loan ? 2 : 1) * Math.round(e.amount * 100);
     for (const s of doc.settlements) twice += (s.from === 1 ? -1 : 1) * 2 * Math.round(s.amount * 100);
     if (Math.abs(twice) <= 1) return 0;
     return Math.sign(twice) * Math.round(Math.abs(twice) / 2) / 100;
@@ -149,6 +150,11 @@ if (typeof document !== "undefined") (() => {
   let me = LS.get("me", null);           // which person uses this phone (0|1)
   let payer = me ?? 0;
   let cat = LS.get("cat", "Food");      // last category used on this phone
+  let kind = "expense";                  // add form mode: "expense" (split 50/50) or "loan" (full amount owed)
+  const other = (i) => 1 - i;
+  const title = (e) => e.loan ? (e.note || "Loan") : (e.note || e.cat || "Expense");
+  const detail = (e) => e.loan ? `${names()[e.payer]} lent ${names()[other(e.payer)]} · ${day(e.ts)}`
+    : `${e.note && e.cat ? e.cat + " · " : ""}${names()[e.payer]} paid · ${day(e.ts)}`;
 
   const saveLocal = () => LS.set("doc", doc);
   const names = () => doc.settings.people;
@@ -222,7 +228,7 @@ if (typeof document !== "undefined") (() => {
   // spending per category since the last settle-up
   function renderBars(open) {
     const by = {};
-    open.forEach((e) => { const k = e.cat || "Uncategorized"; by[k] = (by[k] || 0) + e.amount; });
+    open.filter((e) => !e.loan).forEach((e) => { const k = e.cat || "Uncategorized"; by[k] = (by[k] || 0) + e.amount; });
     const rows = Object.entries(by).sort((a, b) => b[1] - a[1]);
     $("barsCard").hidden = !rows.length;
     const box = $("bars"); box.innerHTML = "";
@@ -254,6 +260,31 @@ if (typeof document !== "undefined") (() => {
     });
   }
 
+  // add form: shared expense (50/50) or loan (one gave the other money, owed in full)
+  function renderForm() {
+    const loan = kind === "loan", [p0, p1] = names();
+    $("kindSeg").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.k === kind));
+    $("chips").hidden = loan;
+    $("payerLabel").textContent = loan ? "Who gave the money?" : "Paid by";
+    if (loan) {
+      const box = $("payerSeg"); box.innerHTML = "";
+      [[0, `${p0} → ${p1}`], [1, `${p1} → ${p0}`]].forEach(([i, txt]) => {
+        const b = document.createElement("button");
+        b.type = "button"; b.textContent = txt; b.setAttribute("aria-pressed", i === payer);
+        b.setAttribute("aria-label", `${names()[i]} gave ${names()[other(i)]}`);
+        b.onclick = () => { payer = i; renderForm(); };
+        box.appendChild(b);
+      });
+    } else {
+      segment($("payerSeg"), (i) => { payer = i; renderForm(); }, payer);
+      renderChips();
+    }
+    $("note").placeholder = loan ? "What for? (optional)" : "What was it? (optional)";
+    const amt = parseAmount();
+    $("add").textContent = !loan ? "Add expense · split 50/50"
+      : `Add loan · ${names()[other(payer)]} owes ${amt === null ? "it all" : fmt(amt)}`;
+  }
+
   function render() {
     if (!conn) { show("connectView"); setStatus("", "Not connected"); return; }
     if (!ready()) {
@@ -275,13 +306,13 @@ if (typeof document !== "undefined") (() => {
       $("balance").append(`${debtor} owes ${creditor} `);
       const s = document.createElement("span"); s.className = "amt"; s.textContent = fmt(bal); $("balance").append(s);
       const open = PE.openExpenses(doc);
-      $("balanceSub").textContent = `${open.length} expense${open.length === 1 ? "" : "s"} since the last settle-up`;
+      const nl = open.filter((e) => e.loan).length, ne = open.length - nl, pl = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+      $("balanceSub").textContent = [ne && pl(ne, "expense"), nl && pl(nl, "loan")].filter(Boolean).join(" · ") + " since the last settle-up";
       $("settleBtn").hidden = false;
     }
 
     $("curSign").textContent = doc.settings.currency.trim();
-    segment($("payerSeg"), (i) => { payer = i; render(); }, payer);
-    renderChips();
+    renderForm();
     segment($("meSeg2"), (i) => { me = i; payer = i; LS.set("me", i); render(); toast(`This phone is now ${names()[i]}'s`); }, me);
 
     // open expenses
@@ -292,13 +323,14 @@ if (typeof document !== "undefined") (() => {
     open.forEach((e) => {
       const li = document.createElement("li");
       li.innerHTML = '<div class="what"><b></b><small></small></div><span class="amt"></span><button class="x" type="button">✕</button>';
-      li.querySelector("b").textContent = e.note || e.cat || "Expense";
-      li.querySelector("small").textContent = `${e.note && e.cat ? e.cat + " · " : ""}${names()[e.payer]} paid · ${day(e.ts)} · each ${fmt(e.amount / 2)}`;
+      if (e.loan) li.classList.add("loan");
+      li.querySelector("b").textContent = (e.loan ? "💸 " : "") + title(e);
+      li.querySelector("small").textContent = detail(e) + (e.loan ? ` · owes ${fmt(e.amount)}` : ` · each ${fmt(e.amount / 2)}`);
       li.querySelector(".amt").textContent = fmt(e.amount);
       const x = li.querySelector("button");
-      x.setAttribute("aria-label", "Delete expense");
+      x.setAttribute("aria-label", e.loan ? "Delete loan" : "Delete expense");
       x.onclick = () => {
-        if (!confirm(`Delete “${e.note || e.cat || "Expense"}” (${fmt(e.amount)})?`)) return;
+        if (!confirm(`Delete “${title(e)}” (${fmt(e.amount)})?`)) return;
         change((d) => { d.deleted.push(e.id); });
         toast("Deleted");
       };
@@ -319,12 +351,12 @@ if (typeof document !== "undefined") (() => {
       exp.forEach((e) => {
         const li = document.createElement("li");
         li.innerHTML = '<div class="what"><b></b><small></small></div><span class="amt"></span>';
-        li.querySelector("b").textContent = e.note || e.cat || "Expense";
-        li.querySelector("small").textContent = `${e.note && e.cat ? e.cat + " · " : ""}${names()[e.payer]} paid · ${day(e.ts)}`;
+        li.querySelector("b").textContent = (e.loan ? "💸 " : "") + title(e);
+        li.querySelector("small").textContent = detail(e);
         li.querySelector(".amt").textContent = fmt(e.amount);
         list.appendChild(li);
       });
-      if (!exp.length) { const li = document.createElement("li"); li.className = "empty"; li.textContent = "No expenses"; list.appendChild(li); }
+      if (!exp.length) { const li = document.createElement("li"); li.className = "empty"; li.textContent = "Nothing in it"; list.appendChild(li); }
       det.appendChild(list);
       if (idx === 0) {
         const undo = document.createElement("button");
@@ -365,15 +397,21 @@ if (typeof document !== "undefined") (() => {
 
   const parseAmount = () => { const v = parseFloat(($("amount").value || "").replace(",", "."));
     return Number.isFinite(v) && v > 0 ? PE.cents(v) : null; };
-  $("amount").addEventListener("input", () => { $("add").disabled = parseAmount() === null; });
+  $("amount").addEventListener("input", () => { $("add").disabled = parseAmount() === null; renderForm(); });
+  $("kindSeg").querySelectorAll("button").forEach((b) => { b.onclick = () => { kind = b.dataset.k; payer = me ?? 0; renderForm(); }; });
   $("form").addEventListener("submit", (ev) => {
     ev.preventDefault();
     const amount = parseAmount(); if (amount === null) return;
     const note = $("note").value.trim();
-    change((d) => { d.expenses.push({ id: uid(), amount, payer, note, cat, ts: Date.now() }); });
-    toast(`Added ${fmt(amount)} · ${names()[payer]} paid`);
+    if (kind === "loan") {
+      change((d) => { d.expenses.push({ id: uid(), amount, payer, note, loan: true, ts: Date.now() }); });
+      toast(`Loan added · ${names()[other(payer)]} owes ${names()[payer]} ${fmt(amount)}`);
+    } else {
+      change((d) => { d.expenses.push({ id: uid(), amount, payer, note, cat, ts: Date.now() }); });
+      toast(`Added ${fmt(amount)} · ${names()[payer]} paid`);
+    }
     $("amount").value = ""; $("note").value = ""; $("add").disabled = true;
-    payer = me ?? 0; render();
+    payer = me ?? 0; kind = "expense"; render();
   });
 
   $("settleBtn").onclick = () => {
@@ -404,7 +442,7 @@ if (typeof document !== "undefined") (() => {
     const esc = (s) => `"${String(s).replace(/"/g, '""')}"`;
     const iso = (ts) => { const t = new Date(ts); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; };
     const rows = ["date,type,category,paid_by,amount,note"]
-      .concat(doc.expenses.map((e) => [iso(e.ts), "expense", esc(e.cat || ""), esc(names()[e.payer]), e.amount, esc(e.note)].join(",")))
+      .concat(doc.expenses.map((e) => [iso(e.ts), e.loan ? "loan" : "expense", esc(e.loan ? "" : e.cat || ""), esc(names()[e.payer]), e.amount, esc(e.loan ? `lent to ${names()[1 - e.payer]}${e.note ? ": " + e.note : ""}` : e.note)].join(",")))
       .concat(doc.settlements.map((s) => [iso(s.ts), "settle-up", "", esc(names()[s.from]), s.amount, esc(`paid ${names()[s.to]}`)].join(",")));
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([rows.join("\n")], { type: "text/csv" }));
